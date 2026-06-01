@@ -43,7 +43,60 @@ module.exports = async (req, res) => {
     const { error: itemsError } = await supabaseAdmin.from('order_items').insert(itemsPayload)
     if (itemsError) throw itemsError
 
-    return res.json({ ok: true, order_number: order.order_number || null })
+    // --- Stock deduction & records ---
+    try {
+      const wineIds = items.map(i => i.id).filter(Boolean)
+      let winesCurrent = []
+      if (wineIds.length) {
+        const { data: winesData, error: wineErr } = await supabaseAdmin.from('wines').select('id, stock').in('id', wineIds)
+        if (wineErr) throw wineErr
+        winesCurrent = winesData || []
+      }
+
+      // check stock availability
+      for (const it of items) {
+        if (!it.id) continue
+        const wine = winesCurrent.find(w => w.id === it.id)
+        if (wine && typeof wine.stock === 'number' && wine.stock < it.qty) {
+          throw new Error(`Insufficient stock for ${it.name || it.id}`)
+        }
+      }
+
+      // deduct stock, insert inventory and sales rows
+      const today = new Date().toISOString().slice(0, 10)
+      for (const it of items) {
+        if (!it.id) continue
+        const wine = winesCurrent.find(w => w.id === it.id)
+        const newStock = (wine && typeof wine.stock === 'number') ? Math.max(0, wine.stock - it.qty) : null
+        if (newStock !== null) {
+          const { error: updErr } = await supabaseAdmin.from('wines').update({ stock: newStock }).eq('id', it.id)
+          if (updErr) throw updErr
+
+          // inventory record
+          const { error: invErr } = await supabaseAdmin.from('inventory').insert([{ wine_id: it.id, change: -Math.abs(it.qty), note: `Sale/order ${order.id}` }])
+          if (invErr) throw invErr
+
+          // sales record
+          const { error: salesErr } = await supabaseAdmin.from('sales').insert([{ wine_id: it.id, qty: it.qty, revenue: (it.price * it.qty), day: today }])
+          if (salesErr) throw salesErr
+        }
+      }
+
+      // create payment record (pending)
+      const { error: payErr } = await supabaseAdmin.from('payments').insert([{ order_id: order.id, amount: total, method: form.payment_method, status: 'pending' }])
+      if (payErr) throw payErr
+
+      return res.json({ ok: true, order_number: order.order_number || null })
+    } catch (postErr) {
+      // attempt to rollback order and items if anything fails after order creation
+      try {
+        await supabaseAdmin.from('order_items').delete().eq('order_id', order.id)
+        await supabaseAdmin.from('orders').delete().eq('id', order.id)
+      } catch (rbErr) {
+        console.error('rollback failed', rbErr)
+      }
+      throw postErr
+    }
   } catch (err) {
     console.error('create-order error', err)
     return res.status(500).json({ error: err.message || String(err) })
