@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
     // Call atomic RPC function on the DB to create order and related records
     try {
       const payload = { form, items, total }
-      const { data, error } = await supabaseAdmin.rpc('create_order', payload)
+      const { data, error } = await supabaseAdmin.rpc('create_order', { payload })
       if (error) throw error
       return res.json(data)
     } catch (rpcErr) {
