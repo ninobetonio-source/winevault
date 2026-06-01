@@ -160,7 +160,7 @@ create policy profiles_insert_admin on profiles
 
 -- Orders: allow insert for authenticated (customers via anon can also insert if you allow), but management restricted to staff/admin
 create policy orders_insert_authenticated on orders
-  for insert using (auth.role() = 'authenticated') with check (true);
+  for insert with check (auth.role() = 'authenticated');
 
 create policy orders_manage_by_staff_admin on orders
   for all using (
