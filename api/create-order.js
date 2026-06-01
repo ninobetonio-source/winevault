@@ -14,14 +14,19 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Missing SUPABASE_URL on server. Set SUPABASE_URL environment variable.' })
   }
 
-  // For safety: operations that modify protected tables (stock, inventory, sales, payments)
-  // require the Supabase service role key. If it's not present, return a clear error rather
-  // than attempting operations with an anon key and causing RLS violations.
-  if (!SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required on the server to create orders and update stock/inventory. Set this env var in your deployment.' })
+  // Prefer service role key for full privileges. If missing, fall back to anon key
+  // so the RPC (security definer) can be called for immediate testing. This is
+  // less secure and not recommended for production — set `SUPABASE_SERVICE_ROLE_KEY`.
+  const usedKey = SERVICE_ROLE_KEY || ANON_KEY
+  if (!usedKey) {
+    return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY is required on the server. Set these env vars in your deployment.' })
   }
 
-  const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  if (!SERVICE_ROLE_KEY && ANON_KEY) {
+    console.warn('SUPABASE_SERVICE_ROLE_KEY missing — using anon key to call RPC (insecure).')
+  }
+
+  const supabaseAdmin = createClient(SUPABASE_URL, usedKey)
 
   try {
     const { form, items, total } = req.body || {}
