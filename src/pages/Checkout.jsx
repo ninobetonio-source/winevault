@@ -17,25 +17,17 @@ export default function Checkout() {
     if (items.length === 0) return toast.error('Cart is empty')
     
     setIsSubmitting(true)
-    const order_number = 'WV' + Date.now().toString().slice(-6)
-    
     try {
-      const { data, error } = await supabase.from('orders').insert([{ 
-        order_number, customer_name: form.full_name, email: form.email, 
-        phone: form.phone, address: form.address, landmark: form.landmark, 
-        delivery_date: form.delivery_date, delivery_time: form.delivery_time, 
-        notes: form.notes, payment_method: form.payment_method, status: 'Pending', total 
-      }]).select()
-      
-      if (error) throw error
-      
-      const orderId = data[0].id
-      const itemsPayload = items.map(i => ({ order_id: orderId, name: i.name, qty: i.qty, price: i.price }))
-      
-      const { error: itemsError } = await supabase.from('order_items').insert(itemsPayload)
-      if (itemsError) throw itemsError
-      
-      toast.success('Order placed successfully: ' + order_number)
+      const response = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ form, items, total })
+      })
+
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Failed to place order')
+
+      toast.success('Order placed successfully: ' + (result.order_number || ''))
       clear()
       setTimeout(() => {
         window.location.href = '/track'
