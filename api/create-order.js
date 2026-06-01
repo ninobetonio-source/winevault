@@ -1,16 +1,21 @@
 const { createClient } = require('@supabase/supabase-js')
 
+// Load local .env when running locally (ignored in many serverless environments)
+try { require('dotenv').config() } catch (e) {}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const SUPABASE_URL = process.env.SUPABASE_URL
+  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
   const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'Missing Supabase configuration on server' })
+  if (!SUPABASE_URL || (!SERVICE_ROLE_KEY && !ANON_KEY)) {
+    return res.status(500).json({ error: 'Missing Supabase configuration on server. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (recommended). For local dev you may set SUPABASE_ANON_KEY.' })
   }
 
-  const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+  const usedKey = SERVICE_ROLE_KEY || ANON_KEY
+  const supabaseAdmin = createClient(SUPABASE_URL, usedKey)
 
   try {
     const { form, items, total } = req.body || {}
