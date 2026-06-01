@@ -148,17 +148,7 @@ create policy profiles_update_self_or_admin on profiles
 -- Also allow users to create their own profile when signing up (self-register).
 drop policy if exists profiles_insert_admin on profiles;
 create policy profiles_insert_admin on profiles
-  for insert using (
-    (
-      -- allow self registration when the authenticated user's email matches the new profile
-      (auth.jwt() ->> 'email') = email
-    )
-    or
-    (
-      -- allow inserts when the requester is an admin (admin account must already exist in profiles)
-      exists (select 1 from profiles p where p.email = auth.jwt() ->> 'email' and p.role = 'admin')
-    )
-  ) with check (
+  for insert with check (
     (
       (auth.jwt() ->> 'email') = email
     )
